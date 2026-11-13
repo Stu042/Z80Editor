@@ -3,6 +3,7 @@
 #include "debugsession.h"
 #include <QTimer>
 #include <QAction>
+#include <QActionGroup>
 #include <QApplication>
 #include <QClipboard>
 #include <QCloseEvent>
@@ -76,6 +77,22 @@ Window::Window(QWidget *parent, bool restoreLastFile)
       editor_->find(lastSearch_);
     }
   });
+  auto *view = menuBar()->addMenu("&View");
+  auto *tabWidthMenu = view->addMenu("Tab &width");
+  auto *tabWidths = new QActionGroup(this);
+  const int tabWidth = QSettings().value("tabWidth", 4).toInt() == 8 ? 8 : 4;
+  editor_->setTabStopDistance(editor_->fontMetrics().horizontalAdvance(' ') * tabWidth);
+  for (int width : {4, 8}) {
+    auto *action = tabWidthMenu->addAction(QString("%1 characters").arg(width));
+    action->setObjectName(QString("tabWidth%1Action").arg(width));
+    action->setCheckable(true);
+    tabWidths->addAction(action);
+    action->setChecked(width == tabWidth);
+    connect(action, &QAction::triggered, this, [this, width] {
+      editor_->setTabStopDistance(editor_->fontMetrics().horizontalAdvance(' ') * width);
+      QSettings().setValue("tabWidth", width);
+    });
+  }
   auto *execution = menuBar()->addMenu("&Run");
   run_ = execution->addAction("Run Z80Test", QKeySequence(Qt::Key_F5), this,
                               &Window::run);

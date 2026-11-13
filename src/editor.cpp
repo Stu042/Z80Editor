@@ -114,7 +114,7 @@ void Editor::goToLine(int number, bool error) {
 }
 void Editor::keyPressEvent(QKeyEvent *event) {
   if (event->key() == Qt::Key_Tab && !textCursor().hasSelection()) {
-    insertPlainText(QString(4 - textCursor().positionInBlock() % 4, ' '));
+    insertPlainText(QStringLiteral("\t"));
     return;
   }
   QPlainTextEdit::keyPressEvent(event);
