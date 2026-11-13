@@ -23,6 +23,7 @@ public:
   void clearAnnotations();
   void annotate(int line, const QString &text);
   QString annotation(int line) const;
+  void setOverlayRegisters(const QStringList &registers);
   void paintNumbers(QPaintEvent *event);
   void goToLine(int number, bool error = false);
 
@@ -37,6 +38,8 @@ private:
   void updateMargins();
   void highlightLine();
   QMap<int, QString> annotations_;
+  QStringList overlayRegisters_;
+  bool filterRegisters_ = false;
   LineNumbers *numbers_;
   int errorLine_ = -1;
   int executionLine_ = -1;

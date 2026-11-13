@@ -63,14 +63,17 @@ the app starts with an untitled document.
   Long calls and F5 continuation stay cancellable with Shift+F5.
 - The editor provides line numbers, Z80/Z80N syntax highlighting, and four-space
   tab indentation. Assembly files are UTF-8 text.
-- Set initial registers in the Simulation section, e.g.
+- The editor uses the full height of the workspace. File and execution buttons,
+  Simulation settings, and results are in a resizable right sidebar.
+- Set initial registers in the sidebar’s Simulation section, e.g.
   `A=10 BC=0x1234 SP=0xfffe AF'=0x1234`. Omitted registers default to zero.
   Use `PC=0x8000` for code assembled at `ORG $8000`. Register inputs are passed
   as separate process arguments; there is no shell expansion or need to quote
   dollar signs or alternate-register apostrophes.
-- Set the clock frequency and step limit before running. End programs with
+- Set the clock frequency in the sidebar and the step limit in
+  **Edit → Preferences** before running. End programs with
   `BREAK`; `HALT` waits and eventually reaches the step limit in this simulator.
-- The Simulator field defaults to the Z80Test executable built with this project.
+- The Simulator field in **Edit → Preferences** defaults to the Z80Test executable built with this project.
   Browse to a different Z80Test executable if desired. Changes to simulator
   sources are picked up when you rebuild the editor project.
   Select **Use bundled** to restore execution overlays if a saved external

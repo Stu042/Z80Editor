@@ -4,6 +4,7 @@
 #include <QAction>
 #include <QApplication>
 #include <QFile>
+#include <QDialog>
 #include <QHelpEvent>
 #include <QLabel>
 #include <QLineEdit>
@@ -295,6 +296,41 @@ private slots:
     window.findChild<QAction *>("runAction")->trigger();
     QTRY_COMPARE(finished.count(), 1);
     QVERIFY(editor->annotation(1).contains("A=2A"));
+  }
+  void preferencesAndOverlayRegisters() {
+    QSettings().remove("overlayRegisters");
+    Window window;
+    auto *preferences = window.findChild<QDialog *>("preferencesDialog");
+    auto *path = window.findChild<QLineEdit *>("simulatorPath");
+    QVERIFY(preferences);
+    QVERIFY(preferences->isAncestorOf(path));
+    QVERIFY(!preferences->isVisible());
+    window.findChild<QAction *>("preferencesAction")->trigger();
+    QVERIFY(preferences->isVisible());
+    preferences->hide();
+    const QStringList defaults = {"A", "BC", "DE", "HL", "F"};
+    for (auto *button : window.findChildren<QPushButton *>())
+      if (button->objectName().startsWith("overlayRegister_"))
+        QCOMPARE(button->isChecked(), defaults.contains(button->text()));
+    auto *editor = window.findChild<Editor *>("sourceEditor");
+    editor->setPlainText("ld b,1\nld a,2\nbreak\n");
+    window.stepInto();
+    QVERIFY(editor->annotation(1).contains("B=01"));
+    QVERIFY(!editor->annotation(1).contains("PC="));
+    QVERIFY(!editor->annotation(1).contains("R="));
+    auto *bc = window.findChild<QPushButton *>("overlayRegister_BC");
+    bc->click();
+    QVERIFY(!editor->annotation(1).contains("B="));
+    window.findChild<QPushButton *>("overlayRegister_PC")->click();
+    QVERIFY(editor->annotation(1).contains("PC="));
+    Window restored;
+    QVERIFY(!restored.findChild<QPushButton *>("overlayRegister_BC")->isChecked());
+    QVERIFY(restored.findChild<QPushButton *>("overlayRegister_PC")->isChecked());
+    bc->click();
+    window.findChild<QPushButton *>("overlayRegister_PC")->click();
+    QVERIFY(editor->annotation(1).contains("B=01"));
+    QVERIFY(editor->annotation(1).contains("+7 T"));
+    QSettings().remove("overlayRegisters");
   }
   void annotationsPaintAtColumn60() {
     Editor editor;

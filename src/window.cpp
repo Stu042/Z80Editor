@@ -8,6 +8,9 @@
 #include <QClipboard>
 #include <QCloseEvent>
 #include <QDir>
+#include <QDialog>
+#include <QDialogButtonBox>
+#include <QGridLayout>
 #include <QDoubleSpinBox>
 #include <QFileDialog>
 #include <QFileInfo>
@@ -29,7 +32,7 @@
 #include <QStatusBar>
 #include <QStringDecoder>
 #include <QTemporaryDir>
-#include <QToolBar>
+#include <QToolButton>
 #include <QVBoxLayout>
 
 Window::Window(QWidget *parent, bool restoreLastFile)
@@ -106,23 +109,43 @@ Window::Window(QWidget *parent, bool restoreLastFile)
   stepInto_->setObjectName("stepIntoAction");
   debugTimer_ = new QTimer(this);
   connect(debugTimer_, &QTimer::timeout, this, &Window::debugTick);
-  auto *toolbar = addToolBar("Main");
-  toolbar->setMovable(false);
-  toolbar->addAction(newAction);
-  toolbar->addAction(openAction);
-  toolbar->addAction(saveAction);
-  toolbar->addSeparator();
   run_->setText("Run · F5");
-  toolbar->addAction(run_);
-  toolbar->addAction(stop_);
-  toolbar->addAction(stepOver_);
-  toolbar->addAction(stepInto_);
 
   auto *central = new QWidget;
-  auto *layout = new QVBoxLayout(central);
-  layout->setContentsMargins(10, 8, 10, 8);
+  auto *layout = new QHBoxLayout(central);
+  layout->setContentsMargins(0, 0, 0, 0);
+  auto *splitter = new QSplitter(Qt::Horizontal);
+  splitter->setObjectName("editorSplitter");
+  splitter->setChildrenCollapsible(false);
+  splitter->addWidget(editor_);
+  auto *sidebar = new QWidget;
+  sidebar->setObjectName("simulationSidebar");
+  auto *sidebarLayout = new QVBoxLayout(sidebar);
+  sidebarLayout->setContentsMargins(6, 8, 8, 8);
+  auto *buttons = new QGridLayout;
+  const QList<QAction *> actions = {newAction, openAction, saveAction,
+                                    run_, stop_, stepOver_, stepInto_};
+  for (int i = 0; i < actions.size(); ++i) {
+    auto *button = new QToolButton;
+    button->setDefaultAction(actions[i]);
+    button->setToolButtonStyle(Qt::ToolButtonTextOnly);
+    button->setSizePolicy(QSizePolicy::Expanding, QSizePolicy::Fixed);
+    buttons->addWidget(button, i / 3, i % 3);
+  }
+  sidebarLayout->addLayout(buttons);
   auto *options = new QGroupBox("Simulation");
   auto *form = new QFormLayout(options);
+  form->setRowWrapPolicy(QFormLayout::WrapAllRows);
+  form->setFieldGrowthPolicy(QFormLayout::AllNonFixedFieldsGrow);
+  auto *preferences = new QDialog(this);
+  preferences->setObjectName("preferencesDialog");
+  preferences->setWindowTitle("Preferences");
+  auto *preferencesLayout = new QVBoxLayout(preferences);
+  auto *preferencesForm = new QFormLayout;
+  preferencesLayout->addLayout(preferencesForm);
+  auto *preferencesAction = edit->addAction("&Preferences…", QKeySequence::Preferences,
+                                           preferences, &QDialog::show);
+  preferencesAction->setObjectName("preferencesAction");
   auto *backendRow = new QWidget;
   auto *backendLayout = new QHBoxLayout(backendRow);
   backendLayout->setContentsMargins(0, 0, 0, 0);
@@ -145,10 +168,13 @@ Window::Window(QWidget *parent, bool restoreLastFile)
     if (!path.isEmpty())
       simulator_->setText(path);
   });
-  form->addRow("Simulator", backendRow);
+  preferencesForm->addRow("Simulator", backendRow);
   auto *backendHint = new QLabel;
   backendHint->setObjectName("simulatorOverlayHint");
-  form->addRow(QString(), backendHint);
+  preferencesForm->addRow(QString(), backendHint);
+  auto *closePreferences = new QDialogButtonBox(QDialogButtonBox::Close);
+  connect(closePreferences, &QDialogButtonBox::rejected, preferences, &QDialog::hide);
+  preferencesLayout->addWidget(closePreferences);
   connect(simulator_, &QLineEdit::textChanged, this, [backendHint](const QString &path) {
     const bool bundled = QFileInfo(path.trimmed()).absoluteFilePath() ==
         QFileInfo(QStringLiteral(Z80TEST_DEFAULT_EXECUTABLE)).absoluteFilePath();
@@ -163,34 +189,50 @@ Window::Window(QWidget *parent, bool restoreLastFile)
   registers_->setToolTip("Space-separated register assignments. No shell is "
                          "used. Example: AF'=0x1234 PC=0x8000");
   form->addRow("Initial registers", registers_);
-  auto *timing = new QWidget;
-  auto *timingLayout = new QHBoxLayout(timing);
-  timingLayout->setContentsMargins(0, 0, 0, 0);
   clock_ = new QDoubleSpinBox;
   clock_->setObjectName("clockHz");
   clock_->setRange(1, 1000000000);
   clock_->setDecimals(0);
   clock_->setSingleStep(3500000);
   clock_->setSuffix(" Hz");
+  form->addRow("Clock", clock_);
   maxSteps_ = new QSpinBox;
   maxSteps_->setObjectName("maxSteps");
   maxSteps_->setRange(1, 1000000000);
-  timingLayout->addWidget(clock_);
-  timingLayout->addSpacing(20);
-  timingLayout->addWidget(new QLabel("Step limit"));
-  timingLayout->addWidget(maxSteps_);
-  timingLayout->addStretch();
-  timingLayout->addWidget(new QLabel("End your program with BREAK"));
-  form->addRow("Clock", timing);
-  layout->addWidget(options);
-  auto *splitter = new QSplitter(Qt::Vertical);
-  splitter->setObjectName("editorSplitter");
-  splitter->addWidget(editor_);
+  preferencesForm->addRow("Step limit", maxSteps_);
+  auto *overlayButtons = new QWidget;
+  auto *overlayLayout = new QGridLayout(overlayButtons);
+  overlayLayout->setContentsMargins(0, 0, 0, 0);
+  const QStringList overlayRegisters = {"A", "BC", "DE", "HL", "F", "IX", "IY", "SP", "PC",
+      "AF", "AF'", "BC'", "DE'", "HL'", "I", "R", "IFF1", "IFF2", "IM", "HALT"};
+  const QStringList defaults = {"A", "BC", "DE", "HL", "F"};
+  const auto selected = QSettings().value("overlayRegisters", defaults).toStringList();
+  for (int i = 0; i < overlayRegisters.size(); ++i) {
+    const auto name = overlayRegisters[i];
+    auto *button = new QPushButton(name);
+    button->setObjectName("overlayRegister_" + name);
+    button->setCheckable(true);
+    button->setChecked(selected.contains(name));
+    button->setToolTip("Show changes to " + name + " in execution overlays");
+    overlayLayout->addWidget(button, i / 5, i % 5);
+    connect(button, &QPushButton::toggled, this, [this, overlayRegisters] {
+      QStringList selected;
+      for (const auto &name : overlayRegisters)
+        if (findChild<QPushButton *>("overlayRegister_" + name)->isChecked())
+          selected << name;
+      editor_->setOverlayRegisters(selected);
+      QSettings().setValue("overlayRegisters", selected);
+    });
+  }
+  editor_->setOverlayRegisters(selected);
+  form->addRow("Overlay registers", overlayButtons);
+  form->addRow(new QLabel("End your program with BREAK"));
+  sidebarLayout->addWidget(options);
   auto *resultPanel = new QWidget;
   auto *resultLayout = new QVBoxLayout(resultPanel);
   resultLayout->setContentsMargins(0, 5, 0, 0);
   auto *resultHeader = new QHBoxLayout;
-  resultHeader->addWidget(new QLabel("Results — registers, flags and timing"));
+  resultHeader->addWidget(new QLabel("Results"));
   resultHeader->addStretch();
   auto *copy = new QPushButton("Copy results");
   connect(copy, &QPushButton::clicked, this, [this] {
@@ -205,8 +247,11 @@ Window::Window(QWidget *parent, bool restoreLastFile)
   output_->setPlaceholderText("Press F5 to run the current assembly. Results "
                               "and any source errors appear here.");
   resultLayout->addWidget(output_);
-  splitter->addWidget(resultPanel);
-  splitter->setSizes({360, 300});
+  sidebarLayout->addWidget(resultPanel, 1);
+  splitter->addWidget(sidebar);
+  splitter->setStretchFactor(0, 1);
+  splitter->setStretchFactor(1, 0);
+  splitter->setSizes({760, 390});
   layout->addWidget(splitter, 1);
   setCentralWidget(central);
   position_ = new QLabel;
@@ -231,7 +276,7 @@ Window::Window(QWidget *parent, bool restoreLastFile)
             if (error == QProcess::FailedToStart) {
               captured_ =
                   ("Could not start Z80Test: " + process_.errorString() +
-                   "\nCheck the Simulator path above.")
+                   "\nCheck the Simulator path in Edit → Preferences.")
                       .toUtf8();
               finish(-1, QProcess::CrashExit);
             }
@@ -265,9 +310,9 @@ void Window::readSettings() {
   maxSteps_->setValue(settings.value("maxSteps", 1000000).toInt());
   if (settings.contains("geometry"))
     restoreGeometry(settings.value("geometry").toByteArray());
-  if (settings.contains("splitter"))
+  if (settings.contains("sidebarSplitter"))
     findChild<QSplitter *>("editorSplitter")
-        ->restoreState(settings.value("splitter").toByteArray());
+        ->restoreState(settings.value("sidebarSplitter").toByteArray());
 }
 void Window::writeSettings() {
   QSettings settings;
@@ -276,7 +321,7 @@ void Window::writeSettings() {
   settings.setValue("clock", clock_->value());
   settings.setValue("maxSteps", maxSteps_->value());
   settings.setValue("geometry", saveGeometry());
-  settings.setValue("splitter",
+  settings.setValue("sidebarSplitter",
                     findChild<QSplitter *>("editorSplitter")->saveState());
 }
 void Window::updateTitle() {
@@ -385,7 +430,7 @@ void Window::run() {
   if (!QFileInfo(executable).isFile() ||
       !QFileInfo(executable).isExecutable()) {
     output_->setPlainText(
-        "Cannot run Z80Test. Select a valid executable in Simulator above.\n" +
+        "Cannot run Z80Test. Select a valid executable in Edit → Preferences.\n" +
         executable);
     runStatus_->setText("Simulator unavailable");
     return;

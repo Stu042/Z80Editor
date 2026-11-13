@@ -192,7 +192,41 @@ void Editor::annotate(int line, const QString &text) {
     viewport()->update();
   }
 }
-QString Editor::annotation(int line) const { return annotations_.value(line); }
+void Editor::setOverlayRegisters(const QStringList &registers) {
+  overlayRegisters_ = registers;
+  filterRegisters_ = true;
+  viewport()->update();
+}
+QString Editor::annotation(int line) const {
+  const auto raw = annotations_.value(line);
+  if (!filterRegisters_)
+    return raw;
+  QStringList visible;
+  for (const auto &part : raw.split("  ", Qt::SkipEmptyParts)) {
+    if (part.startsWith('[') || part.startsWith('+')) {
+      visible << part;
+      continue;
+    }
+    const auto name = part.section(QRegularExpression("[=:]"), 0, 0);
+    if (overlayRegisters_.contains(name)) {
+      visible << part;
+      continue;
+    }
+    // Byte instructions remain visible when their parent pair is selected.
+    const bool alternate = name.endsWith('\'');
+    const auto base = alternate ? name.chopped(1) : name;
+    QString pair;
+    if (base == "B" || base == "C") pair = "BC";
+    if (base == "D" || base == "E") pair = "DE";
+    if (base == "H" || base == "L") pair = "HL";
+    if (base == "A" || base == "F") pair = "AF";
+    if (!pair.isEmpty() && overlayRegisters_.contains(pair + (alternate ? "'" : "")))
+      visible << part;
+    else if (name == "AF" && overlayRegisters_.contains("A"))
+      visible << "A=" + part.section('=', 1).left(2);
+  }
+  return visible.join("  ");
+}
 QRectF Editor::annotationRect(const QTextBlock &block, const QString &text) const {
   const auto rect = blockBoundingGeometry(block).translated(contentOffset());
   const qreal column60 = document()->documentMargin() +
@@ -209,7 +243,7 @@ bool Editor::viewportEvent(QEvent *event) {
     const auto *help = static_cast<QHelpEvent *>(event);
     auto block = firstVisibleBlock();
     while (block.isValid()) {
-      const auto text = annotations_.value(block.blockNumber() + 1);
+      const auto text = annotation(block.blockNumber() + 1);
       const auto rect = annotationRect(block, text);
       if (rect.top() > viewport()->height())
         break;
@@ -251,7 +285,7 @@ void Editor::paintEvent(QPaintEvent *event) {
     const auto rect = blockBoundingGeometry(block).translated(contentOffset());
     if (rect.top() > viewport()->height())
       break;
-    const auto text = annotations_.value(block.blockNumber() + 1);
+    const auto text = annotation(block.blockNumber() + 1);
     if (!text.isEmpty() && rect.bottom() >= 0) {
       const auto label = annotationRect(block, text);
       painter.fillRect(label, palette().alternateBase());
