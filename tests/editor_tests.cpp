@@ -7,6 +7,7 @@
 #include <QHelpEvent>
 #include <QLabel>
 #include <QLineEdit>
+#include <QPushButton>
 #include <QSettings>
 #include <QSignalSpy>
 #include <QSpinBox>
@@ -199,6 +200,22 @@ private slots:
     QVERIFY(output->toPlainText().contains("A=4 (0x04)"));
     QVERIFY(output->toPlainText().contains("T-states: 73"));
   }
+  void callRoutineImmediatelyAfterBreak() {
+    Window window;
+    auto *editor = window.findChild<Editor *>("sourceEditor");
+    editor->setPlainText("ld b,10\ncall routine\nbreak\nroutine: ld a,b\ninc a\nret\n");
+    QSignalSpy finished(&window, &Window::runFinished);
+    window.run();
+    QTRY_COMPARE(finished.count(), 1);
+    QCOMPARE(finished.first().first().toInt(), 0);
+    QVERIFY(editor->annotation(4).contains("A=0A"));
+    QVERIFY(editor->annotation(5).contains("A=0B"));
+    QVERIFY(!editor->annotation(6).isEmpty());
+    const auto output = window.findChild<QPlainTextEdit *>("resultsOutput")->toPlainText();
+    QVERIFY(output.contains("A=11 (0x0B)"));
+    QVERIFY(output.contains("Stopped: BREAK"));
+    QCOMPARE(editor->textCursor().blockNumber(), 2);
+  }
   void stepOverNestedAndConditionalCalls() {
     Window window;
     auto *editor = window.findChild<Editor *>("sourceEditor");
@@ -261,6 +278,23 @@ private slots:
     QVERIFY(editor->annotation(2).contains("[8000]=2A"));
     QVERIFY(editor->annotation(3).contains("A=2B"));
     QCOMPARE(editor->toPlainText(), source);
+  }
+  void bundledSelectionRestoresF5Overlays() {
+    Window window;
+    auto *path = window.findChild<QLineEdit *>("simulatorPath");
+    auto *hint = window.findChild<QLabel *>("simulatorOverlayHint");
+    const auto bundledPath = path->text();
+    path->setText("/custom/Z80Test");
+    QVERIFY(hint->text().contains("final results only"));
+    window.findChild<QPushButton *>("useBundledSimulator")->click();
+    QCOMPARE(path->text(), bundledPath);
+    QVERIFY(hint->text().contains("overlays enabled"));
+    auto *editor = window.findChild<Editor *>("sourceEditor");
+    editor->setPlainText("ld a,42\nbreak\n");
+    QSignalSpy finished(&window, &Window::runFinished);
+    window.findChild<QAction *>("runAction")->trigger();
+    QTRY_COMPARE(finished.count(), 1);
+    QVERIFY(editor->annotation(1).contains("A=2A"));
   }
   void annotationsPaintAtColumn60() {
     Editor editor;

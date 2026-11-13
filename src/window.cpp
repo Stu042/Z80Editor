@@ -130,8 +130,15 @@ Window::Window(QWidget *parent, bool restoreLastFile)
   simulator_->setObjectName("simulatorPath");
   simulator_->setPlaceholderText("Path to Z80Test executable");
   auto *browse = new QPushButton("Browse…");
+  auto *bundled = new QPushButton("Use bundled");
+  bundled->setObjectName("useBundledSimulator");
+  bundled->setToolTip("Use the bundled simulator to display execution overlays with F5.");
   backendLayout->addWidget(simulator_, 1);
   backendLayout->addWidget(browse);
+  backendLayout->addWidget(bundled);
+  connect(bundled, &QPushButton::clicked, this, [this] {
+    simulator_->setText(QStringLiteral(Z80TEST_DEFAULT_EXECUTABLE));
+  });
   connect(browse, &QPushButton::clicked, this, [this] {
     auto path = QFileDialog::getOpenFileName(this, "Select Z80Test executable",
                                              simulator_->text());
@@ -139,6 +146,16 @@ Window::Window(QWidget *parent, bool restoreLastFile)
       simulator_->setText(path);
   });
   form->addRow("Simulator", backendRow);
+  auto *backendHint = new QLabel;
+  backendHint->setObjectName("simulatorOverlayHint");
+  form->addRow(QString(), backendHint);
+  connect(simulator_, &QLineEdit::textChanged, this, [backendHint](const QString &path) {
+    const bool bundled = QFileInfo(path.trimmed()).absoluteFilePath() ==
+        QFileInfo(QStringLiteral(Z80TEST_DEFAULT_EXECUTABLE)).absoluteFilePath();
+    backendHint->setText(bundled
+        ? "Execution overlays enabled"
+        : "External simulator: final results only. Select Use bundled for execution overlays.");
+  });
   registers_ = new QLineEdit;
   registers_->setObjectName("initialRegisters");
   registers_->setPlaceholderText(

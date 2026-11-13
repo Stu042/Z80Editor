@@ -73,6 +73,9 @@ the app starts with an untitled document.
 - The Simulator field defaults to the Z80Test executable built with this project.
   Browse to a different Z80Test executable if desired. Changes to simulator
   sources are picked up when you rebuild the editor project.
+  Select **Use bundled** to restore execution overlays if a saved external
+  simulator path is selected. The hint below the field shows whether overlays
+  are enabled; external executables provide final results only.
 
 F5 writes a temporary snapshot of the editor text and runs the bundled simulator
 core in short batches so the UI stays responsive. A custom Simulator executable
